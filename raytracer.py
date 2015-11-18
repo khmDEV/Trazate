@@ -150,20 +150,20 @@ def add_plane(position, normal):
             if (int(M[0] * 2) % 2) == (int(M[2] * 2) % 2) else color_plane1),
         diffuse_c=.75, specular_c=.5, reflection=.25)
 
-def calculate_ray(rayO,rayD,col_ray,reflection,max):
+def calculate_ray(rayO,rayD,col,reflection,max):
     if max==0:
-        return col_ray
+        return col
     traced = trace_ray(rayO, rayD)
     if not traced:
-        return col_ray
+        return col
     obj, M, N, col_ray = traced
     # Reflection: create a new ray.
 
     rayOref, rayDref = M + N * .0001, normalize(rayD - 2 * (np.dot(rayD, N)) * N)
-    col = reflection * col_ray
+    col += reflection * col_ray
     reflection *= obj.get('reflection', 1.)
 
-    col=calculate_ray(rayOref,rayDref,col_ray,reflection,max-1)
+    col=calculate_ray(rayOref,rayDref,col,reflection,max-1)
 
     # Refractation
 
@@ -173,12 +173,12 @@ def calculate_ray(rayO,rayD,col_ray,reflection,max):
 color_plane0 = 1. * np.ones(3)
 color_plane1 = 0. * np.ones(3)
 scene = [
-        # add_sphere([.75, .1, 1.], .6, [0., 0., 1.]),
-        #  add_sphere([-.75, .1, 2.25], .6, [.5, .223, .5]),
-        #  add_sphere([-2.75, .1, 3.5], .6, [1., .572, .184]),
-        # add_plane([0., -.5, 0.], [0., 1., 0.]),
+        add_sphere([.75, .1, 1.], .6, [0., 0., 1.]),
+         add_sphere([-.75, .1, 2.25], .6, [.5, .223, .5]),
+         add_sphere([-2.75, .1, 3.5], .6, [1., .572, .184]),
+        add_plane([0., -.5, 0.], [0., 1., 0.]),
         add_triangle([2., 2., 5.], [2., -2., 5.], [-2., -2., 5.], [.5, .223, .5]),
-        # add_plane([0., 0, 10], [0., 0., -0.5]),
+        add_plane([0., 0, 10], [0., 0., -0.5]),
     ]
 
 # Light position and color.
@@ -212,7 +212,7 @@ for i, x in enumerate(np.linspace(S[0], S[2], w)):
         depth = 0
         rayO, rayD = O, D
         reflection = 1.
-        # # Loop through initial and secondary rays.
+        # Loop through initial and secondary rays.
         # while depth < depth_max:
         #     traced = trace_ray(rayO, rayD)
         #     if not traced:
