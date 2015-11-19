@@ -1,8 +1,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-w = 400
-h = 300
+w = 200
+h = 150
 
 def normalize(x):
     x /= np.linalg.norm(x)
@@ -16,7 +16,7 @@ def intersect_plane(O, D, P, N):
     if np.abs(denom) < 1e-6:
         return np.inf
     d = np.dot(P - O, N) / denom
-    if d < 0:
+    if d <= 0:
         return np.inf
     return d
 
@@ -64,7 +64,7 @@ def intersect_sphere(O, D, S, R):
     b = 2 * np.dot(D, OS)
     c = np.dot(OS, OS) - R * R
     disc = b * b - 4 * a * c
-    if disc > 0:
+    if disc >= 0:
         distSqrt = np.sqrt(disc)
         q = (-b - distSqrt) / 2.0 if b < 0 else (-b + distSqrt) / 2.0
         t0 = q / a
@@ -120,8 +120,8 @@ def trace_ray(rayO, rayD):
     # Shadow: find if the point is shadowed or not.
     l = [intersect(M + N * .0001, toL, obj_sh)
             for k, obj_sh in enumerate(scene) if k != obj_idx]
-    if l and min(l) < np.inf:
-        return
+    # if l and min(l) < np.inf:
+    #     return
     # Start computing the color.
     col_ray = ambient
     # Lambert shading (diffuse).
@@ -137,35 +137,110 @@ def add_triangle(a, b, c, color):
         normal=normalize(np.cross((np.array(b)-np.array(a)),(np.array(c)-np.array(a))))
 
         #normal=normalize(np.multiply(np.subtract(b,a),np.subtract(c,a))/np.dot(np.subtract(b,a),np.subtract(c,a)))
-        , color=np.array(color),  reflection=.5)
+        , color=np.array(color),  reflection=.0, refraction=.7)
 
 def add_sphere(position, radius, color):
     return dict(type='sphere', position=np.array(position),
-        radius=np.array(radius), color=np.array(color), reflection=.5)
+        radius=np.array(radius), color=np.array(color), reflection=.0, refraction=0.4)
 
 def add_plane(position, normal):
     return dict(type='plane', position=np.array(position),
         normal=np.array(normal),
         color=lambda M: (color_plane0
-            if (int(M[0] * 2) % 2) == (int(M[2] * 2) % 2) else color_plane1),
-        diffuse_c=.75, specular_c=.5, reflection=.25)
+            if (int(M[0] * 2) % 2) == (int(M[2] * 2) % 2) else color_plane0),
+        diffuse_c=.75, specular_c=.5, reflection=.0, refraction=0.)
 
-def calculate_ray(rayO,rayD,col,reflection,max):
+def calculate_ray(rayO,rayD,max):
+    col = np.zeros(3)
+    col[:] = 0.
+    colRfr = np.zeros(3)
+    colRfr[:] = 0.
+    colRefl = np.zeros(3)
+    colRefl[:] = 0.
     if max==0:
         return col
     traced = trace_ray(rayO, rayD)
     if not traced:
         return col
+    # if max<=4:
+        # print "->>"
+        # print rayO
+        # print rayD
+        # print traced
     obj, M, N, col_ray = traced
+
+    refraction = obj.get('refraction', 1.)
+    reflection = obj.get('reflection', 1.)
+
+    # if max<4:
+    #     print "->>"
+    #     print max
+    #     print rayO
+    #     print rayD
+    #     print obj
+    #     print M
+    #     print col
+    # if refraction>1e-6:
+    #     print "--"
+    #     print max
+    #     print rayO
+    #     print rayD
+    #     print obj
+    #     print M
+    #     print col
+    # if refraction>1e-6:
+    #     print col
+    # print "--"
+    # print col
+    # print rayV * col_ray
+    # print refraction
+    # print col
     # Reflection: create a new ray.
-
     rayOref, rayDref = M + N * .0001, normalize(rayD - 2 * (np.dot(rayD, N)) * N)
-    col += reflection * col_ray
-    reflection *= obj.get('reflection', 1.)
 
-    col=calculate_ray(rayOref,rayDref,col,reflection,max-1)
+    # if reflection>1e-6:
+        # colRfr=calculate_ray(rayOref,rayDref,reflection,max-1)
 
     # Refractation
+
+    # print "---"
+    sc=np.dot(N,rayD)
+    refractionN=-0.7
+    A=np.array(refractionN*sc-np.sqrt(1-refractionN*refractionN*(1-sc*sc)))* N
+    B=np.array(refractionN*rayD)
+    rayDrefr = normalize(A - B) #np.array([0.,0.,1.])#
+    rayOrefr = M + rayDrefr * .0001
+    # print rayDrefr
+
+    # sc=-np.dot(N,rayD)
+    # A=sc-np.sqrt(1-refractionN*refractionN*(1-sc*sc))
+    # B=np.array(refractionN*rayD)
+    # rayDrefr = normalize(B + (refractionN*sc-A)*N)
+    # rayOrefr = M + rayDrefr * .0001
+    # print rayDrefr
+
+    # refraction = rayV * obj.get('refraction', 1.)
+    # print refraction
+    if refraction>1e-6:
+        # if obj['type']=='triangle':
+        #     print "-<<"
+        #     print obj
+        #     print rayO
+        #     print rayD
+        #     print M
+        #     print rayOrefr
+        #     print rayDrefr
+        #     print col
+
+        colRfr=calculate_ray(rayOrefr,rayDrefr,max-1)
+        # print "---"
+        # print traced
+        # print trace_ray(rayOrefr,rayDrefr)
+        # print "--"
+        # print col
+
+    col += col_ray*(1-reflection-refraction)+colRfr*refraction+colRefl*reflection
+
 
     return col
 
@@ -173,16 +248,16 @@ def calculate_ray(rayO,rayD,col,reflection,max):
 color_plane0 = 1. * np.ones(3)
 color_plane1 = 0. * np.ones(3)
 scene = [
-        add_sphere([.75, .1, 1.], .6, [0., 0., 1.]),
-         add_sphere([-.75, .1, 2.25], .6, [.5, .223, .5]),
-         add_sphere([-2.75, .1, 3.5], .6, [1., .572, .184]),
-        add_plane([0., -.5, 0.], [0., 1., 0.]),
-        add_triangle([2., 2., 5.], [2., -2., 5.], [-2., -2., 5.], [.5, .223, .5]),
+        add_sphere([.75, .1, 4.], 1., [0., 0., 1.]),
+        #  add_sphere([-.75, .1, 2.25], .6, [.5, .223, .5]),
+        #  add_sphere([-2.75, .1, 3.5], .6, [1., .572, .184]),
+        # add_plane([0., -1., 0.], [0., 1., 0.]),
+        add_triangle([2., 2., 2.], [2., -2., 2.], [-2., -2., 2.], [1., 1., 1.]),
         add_plane([0., 0, 10], [0., 0., -0.5]),
     ]
 
 # Light position and color.
-L = np.array([5., 5., -10.])
+L = np.array([-5., 0., -10.])
 color_light = np.ones(3)
 
 # Default light and material parameters.
@@ -211,7 +286,7 @@ for i, x in enumerate(np.linspace(S[0], S[2], w)):
         D = normalize(Q - O)
         depth = 0
         rayO, rayD = O, D
-        reflection = 1.
+        rayV = 1.
         # Loop through initial and secondary rays.
         # while depth < depth_max:
         #     traced = trace_ray(rayO, rayD)
@@ -223,7 +298,7 @@ for i, x in enumerate(np.linspace(S[0], S[2], w)):
         #     depth += 1
         #     col += reflection * col_ray
         #     reflection *= obj.get('reflection', 1.)
-        col=calculate_ray(rayO,rayD,col,reflection,depth_max)
+        col=calculate_ray(rayO,rayD,depth_max)
 
         img[h - j - 1, i, :] = np.clip(col, 0, 1)
 
