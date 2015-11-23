@@ -64,7 +64,7 @@ def intersect_sphere(O, D, S, R):
     b = 2 * np.dot(D, OS)
     c = np.dot(OS, OS) - R * R
     disc = b * b - 4 * a * c
-    if disc >= 0:
+    if disc > 0:
         distSqrt = np.sqrt(disc)
         q = (-b - distSqrt) / 2.0 if b < 0 else (-b + distSqrt) / 2.0
         t0 = q / a
@@ -141,12 +141,12 @@ def add_triangle(a, b, c, color):
 
 def add_sphere(position, radius, color):
     return dict(type='sphere', position=np.array(position),
-        radius=np.array(radius), color=np.array(color), reflection=.0, refraction=0.4)
+        radius=np.array(radius), color=np.array(color), reflection=.0, refraction=0.7)
 
 def add_plane(position, normal):
     return dict(type='plane', position=np.array(position),
         normal=np.array(normal),
-        color=lambda M: (color_plane0
+        color=lambda M: (color_plane1
             if (int(M[0] * 2) % 2) == (int(M[2] * 2) % 2) else color_plane0),
         diffuse_c=.75, specular_c=.5, reflection=.0, refraction=0.)
 
@@ -204,34 +204,50 @@ def calculate_ray(rayO,rayD,max):
     # Refractation
 
     # print "---"
-    sc=np.dot(N,rayD)
-    refractionN=-0.7
-    A=np.array(refractionN*sc-np.sqrt(1-refractionN*refractionN*(1-sc*sc)))* N
-    B=np.array(refractionN*rayD)
+    refractionN=0.3
+    I=-rayD
+    sc=np.dot(N,(I))
+    if sc<0:
+        N=-N
+        sc=np.dot(N,(I))
+
+
+    A=(refractionN*sc-np.sqrt(1-refractionN*refractionN*(1-sc*sc))) * N
+
+    B=(refractionN*(I))
     rayDrefr = normalize(A - B) #np.array([0.,0.,1.])#
-    rayOrefr = M + rayDrefr * .0001
+    rayOrefr = M + rayDrefr * .001
     # print rayDrefr
 
-    # sc=-np.dot(N,rayD)
+    # sc=np.dot(N,rayD)
     # A=sc-np.sqrt(1-refractionN*refractionN*(1-sc*sc))
     # B=np.array(refractionN*rayD)
-    # rayDrefr = normalize(B + (refractionN*sc-A)*N)
+    # rayDrefr = normalize(-B + (refractionN*sc-A)*N)
     # rayOrefr = M + rayDrefr * .0001
     # print rayDrefr
 
     # refraction = rayV * obj.get('refraction', 1.)
     # print refraction
-    if refraction>1e-6:
-        # if obj['type']=='triangle':
-        #     print "-<<"
+    if np.abs(refraction)>1e-6:
+        # if obj['type']=='sphere':
+        #     print "-----------------------<<"
+        #     print max
         #     print obj
         #     print rayO
         #     print rayD
         #     print M
         #     print rayOrefr
         #     print rayDrefr
-        #     print col
-
+        # else:
+        #     if max<5:
+        #         print "-<<"
+        #         print max
+        #         print obj
+        #         print rayO
+        #         print rayD
+        #         print M
+        #         print rayOrefr
+        #         print rayDrefr
         colRfr=calculate_ray(rayOrefr,rayDrefr,max-1)
         # print "---"
         # print traced
@@ -251,8 +267,8 @@ scene = [
         add_sphere([.75, .1, 4.], 1., [0., 0., 1.]),
         #  add_sphere([-.75, .1, 2.25], .6, [.5, .223, .5]),
         #  add_sphere([-2.75, .1, 3.5], .6, [1., .572, .184]),
-        # add_plane([0., -1., 0.], [0., 1., 0.]),
-        add_triangle([2., 2., 2.], [2., -2., 2.], [-2., -2., 2.], [1., 1., 1.]),
+        add_plane([0., -1., 0.], [0., 1., 0.]),
+        # add_triangle([2., 2., 6.], [2., -2., 6.], [-2., -2., 6.], [1., 0., 1.]),
         add_plane([0., 0, 10], [0., 0., -0.5]),
     ]
 
