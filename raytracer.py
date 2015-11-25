@@ -2,9 +2,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import random as random
 
-w = 400
-h = 300
-
 def normalize(x):
     x /= np.linalg.norm(x)
     return x
@@ -14,7 +11,7 @@ def intersect_plane(O, D, P, N):
     # plane (P, N), or +inf if there is no intersection.
     # O and P are 3D points, D and N (normal) are normalized vectors.
     denom = np.dot(D, N)
-    if np.abs(denom) < 1e-6:
+    if np.abs(denom) == 0:
         return np.inf
     d = np.dot(P - O, N) / denom
     if d <= 0:
@@ -25,16 +22,7 @@ def intersect_triangle(O, D, a, b, c, N):
     # Return the distance from O to the intersection of the ray (O, D) with the
     # triangle (P, N), or +inf if there is no intersection.
     # O and P are 3D points, D and N (normal) are normalized vectors.
-    # print N
-    # print a
-    # print b
-    # print c
     d = intersect_plane(O,D,a,N);
-    # print "--"
-    # print a
-    # print b
-    # print c
-    # print N
     if d == np.inf:
         return np.inf
     p=O+D*d
@@ -106,6 +94,8 @@ def trace_ray(rayO, rayD):
         t_obj = intersect(rayO, rayD, obj)
         if t_obj < t:
             t, obj_idx = t_obj, i
+
+
     # Return None if the ray does not intersect any object.
     if t == np.inf:
         return
@@ -116,19 +106,24 @@ def trace_ray(rayO, rayD):
     # Find properties of the object.
     N = get_normal(obj, M)
     color = get_color(obj, M)
-    toL = normalize(L - M)
     toO = normalize(O - M)
-    # Shadow: find if the point is shadowed or not.
-    l = [intersect(M + N * .0001, toL, obj_sh)
-            for k, obj_sh in enumerate(scene) if k != obj_idx]
-    # if l and min(l) < np.inf:
-    #     return
-    # Start computing the color.
-    col_ray = ambient
-    # Lambert shading (diffuse).
-    col_ray += obj.get('diffuse_c', diffuse_c) * max(np.dot(N, toL), 0) * color
-    # Blinn-Phong shading (specular).
-    col_ray += obj.get('specular_c', specular_c) * max(np.dot(N, normalize(toL + toO)), 0) ** specular_k * color_light
+    col_ray=0
+    for i, l in enumerate(Lights):
+        L=l["L"]
+        color_light=l["color_light"]
+
+        toL = normalize(L - M)
+        # Shadow: find if the point is shadowed or not.
+        lo = [intersect(M + toL * .0001, toL, obj_sh)
+                for k, obj_sh in enumerate(scene) if k != obj_idx]
+        if not lo or min(lo) > t:
+            # Start computing the color.
+            # Lambert shading (diffuse).
+            col_ray += obj.get('diffuse_c', diffuse_c) * max(np.dot(N, toL), 0) * color
+            # Blinn-Phong shading (specular).
+            col_ray += obj.get('specular_c', specular_c) * max(np.dot(N, normalize(toL + toO)), 0) ** specular_k * color_light
+    col_ray += color*ambient
+
     return obj, M, N, col_ray
 
 def add_triangle(a, b, c, color):
@@ -142,14 +137,14 @@ def add_triangle(a, b, c, color):
 
 def add_sphere(position, radius, color):
     return dict(type='sphere', position=np.array(position),
-        radius=np.array(radius), color=np.array(color), reflection=.0, refraction=0.7)
+        radius=np.array(radius), color=np.array(color), reflection=.0, refraction=0.9)
 
 def add_plane(position, normal):
     return dict(type='plane', position=np.array(position),
         normal=np.array(normal),
-        color=lambda M: (color_plane1
-            if (int(M[0] * 2) % 2) == (int(M[2] * 2) % 2) else color_plane0),
-        diffuse_c=.75, specular_c=.5, reflection=.5, refraction=0.)
+        color=np.array([1.,1.,1.]),
+        # color=lambda M: (color_plane1 if (int(M[0] * 2) % 2) == (int(M[2] * 2) % 2) else color_plane0),
+        diffuse_c=.75, specular_c=.5, reflection=.0, refraction=0.)
 
 def calculate_ray(rayO,rayD,max):
     col = np.zeros(3)
@@ -201,10 +196,14 @@ def calculate_ray(rayO,rayD,max):
 
         colRfr=calculate_ray(rayOrefr,rayDrefr,max-1)
 
-    col += col_ray*(1-reflection-refraction)+colRfr*refraction+colRefl*reflection
+    col = col_ray*(1-refraction-reflection)+colRfr*refraction+colRefl*reflection
 
 
     return col
+
+n=3
+w = 160*n
+h = 90*n
 
 # List of objects.
 color_plane0 = 1. * np.ones(3)
@@ -219,8 +218,12 @@ scene = [
     ]
 
 # Light position and color.
-L = np.array([-5., 10., 0.])
-color_light = np.ones(3)
+Lights=[
+dict(L = np.array([-5., 5., 0.]), color_light = np.ones(3)),
+# dict(L = np.array([0., 5., 0.]), color_light = np.array([0.,0.,1.])),
+# dict(L = np.array([5., 5., 0.]), color_light = np.array([1.,0.,1.]))
+]
+
 
 # Default light and material parameters.
 ambient = .05
@@ -232,16 +235,23 @@ depth_max = 5  # Maximum number of light reflections.
 col = np.zeros(3)  # Current color.
 O = np.array([0., 0, -1.])  # Camera.
 Q = np.array([0., 0., 0.])  # Camera pointing to.
+it=5
+
+
+
 img = np.zeros((h, w, 3))
 
-r = float(w) / h
+rh = float(w) / h
+rw = float(h) / w
 pixh = 2. / h
 pixw = 2. / w
 # Screen coordinates: x0, y0, x1, y1.
-S = (-1., -1. / r + .25, 1., 1. / r + .25)
+S = (-1., -1. / rh + .25, 1., 1. / rw + .25)
 
 # Loop through all pixels.
-it=10
+arr=[[w] * h for i in range (w)]
+
+white=np.ones(3)
 for i, x in enumerate(np.linspace(S[0], S[2], w)):
     if i % 10 == 0:
         print i / float(w) * 100, "%"
@@ -273,8 +283,23 @@ for i, x in enumerate(np.linspace(S[0], S[2], w)):
             #     col += reflection * col_ray
             #     reflection *= obj.get('reflection', 1.)
             col+=calculate_ray(rayO,rayD,depth_max)
+            # print "+++"
+            # print n
+            # print col
             n=n+1
+        # img[h - j - 1, i, :] = np.clip(col/it, 0, 1)
 
-        img[h - j - 1, i, :] = np.clip(col/it, 0, 1)
+        white=np.maximum(np.max(col),np.max(white))*np.ones(3)
+        img[h - j - 1, i, :]=col
+        # print "!!!!!!"
+        # print img[h - j - 1, i, :]
+
+print white
+for i, x in enumerate(np.linspace(S[0], S[2], w)):
+    for j, y in enumerate(np.linspace(S[1], S[3], h)):
+        # print "----"
+        # print img[h - j - 1, i, :]
+        # print np.clip(img[h - j - 1, i]/white, 0, 1)
+        img[h - j - 1, i, :] = np.clip(img[h - j - 1, i]/white, 0, 1)
 
 plt.imsave('fig.png', img)
