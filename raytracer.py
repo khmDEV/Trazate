@@ -221,9 +221,9 @@ def loadOBJ(filename):
             for f in vals[1:]:
                 w = f.split("/")
                 # OBJ Files are 1-indexed so we must subtract 1 below
-                # vertsOut.append(list(verts[int(w[0])-1]))
-                # normsOut.append(list(norms[int(w[2])-1]))
-                # numVerts += 1
+                vertsOut.append(list(verts[int(w[0])-1]))
+                normsOut.append(list(norms[int(w[2])-1]))
+                numVerts += 1
     return vertsOut, normsOut
 
 n=3
@@ -234,17 +234,22 @@ h = 90*n
 color_plane0 = 1. * np.ones(3)
 color_plane1 = 0. * np.ones(3)
 scene = [
-        add_sphere([.75, .1, 4.], 1., [0., 0., 1.]),
-         add_sphere([-.75, .1, 2.25], .6, [.5, .223, .5]),
-         add_sphere([-2.75, .1, 3.5], .6, [1., .572, .184]),
-        add_plane([0., -1., 0.], [0., 1., 0.]),
-        add_triangle([2., 2., 6.], [2., -2., 6.], [-2., -2., 6.], [1., 0., 1.]),
-        add_plane([0., 0, 10], [0., 0., -0.5]),
+        #add_sphere([.75, .1, 4.], 1., [0., 0., 1.]),
+        # add_sphere([-.75, .1, 2.25], .6, [.5, .223, .5]),
+         #add_sphere([-2.75, .1, 3.5], .6, [1., .572, .184]),
+        #add_plane([0., -1., 0.], [0., 1., 0.]),
+        #add_triangle([2., 2., 6.], [2., -2., 6.], [-2., -2., 6.], [1., 0., 1.]),
+        #add_plane([0., 0, 10], [0., 0., -0.5]),
     ]
 
 #Import .obj
-listaVertices,listaNormales = loadOBJ("test.obj")
+listaVertices,listaNormales = loadOBJ("test.OBJ")
 
+print listaVertices
+
+it = iter(listaVertices)
+for x, y, z in zip(it, it, it):
+    scene.append(add_triangle(x,y,z,[.5, .223, .5]))
 
 # Light position and color.
 Lights=[
