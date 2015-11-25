@@ -201,6 +201,31 @@ def calculate_ray(rayO,rayD,max):
 
     return col
 
+
+#Import .obj
+def loadOBJ(filename):
+    numVerts = 0
+    verts = []
+    norms = []
+    vertsOut = []
+    normsOut = []
+    for line in open(filename, "r"):
+        vals = line.split()
+        if vals[0] == "v":
+            v = map(float, vals[1:4])
+            verts.append(v)
+        if vals[0] == "vn":
+            n = map(float, vals[1:4])
+            norms.append(n)
+        if vals[0] == "f":
+            for f in vals[1:]:
+                w = f.split("/")
+                # OBJ Files are 1-indexed so we must subtract 1 below
+                # vertsOut.append(list(verts[int(w[0])-1]))
+                # normsOut.append(list(norms[int(w[2])-1]))
+                # numVerts += 1
+    return vertsOut, normsOut
+
 n=3
 w = 160*n
 h = 90*n
@@ -216,6 +241,10 @@ scene = [
         add_triangle([2., 2., 6.], [2., -2., 6.], [-2., -2., 6.], [1., 0., 1.]),
         add_plane([0., 0, 10], [0., 0., -0.5]),
     ]
+
+#Import .obj
+listaVertices,listaNormales = loadOBJ("test.obj")
+
 
 # Light position and color.
 Lights=[
