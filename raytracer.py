@@ -126,6 +126,13 @@ def trace_ray(rayO, rayD):
 
     return obj, M, N, col_ray
 
+def transform_triangle(matrix, triangle):
+    triangle["a"]=transform_point(matrix,triangle["a"])
+    triangle["b"]=transform_point(matrix,triangle["b"])
+    triangle["c"]=transform_point(matrix,triangle["c"])
+    triangle["normal"]=normalize(np.cross((triangle["b"]-triangle["a"]),(triangle["c"]-triangle["a"])))
+
+
 def add_triangle(a, b, c, color):
     return dict(type='triangle', a=np.array(a),
         b=np.array(b), c=np.array(c),
@@ -135,16 +142,40 @@ def add_triangle(a, b, c, color):
         #normal=normalize(np.multiply(np.subtract(b,a),np.subtract(c,a))/np.dot(np.subtract(b,a),np.subtract(c,a)))
         , color=np.array(color),  reflection=.0, refraction=.7)
 
+def transform_point(matrix, point):
+    p=np.array(point[:])
+    p=np.array(np.append(p,[1]))
+    matrix=np.array(matrix)
+    r=np.dot(p,matrix)
+    return r[0:3]/r[3]
+
+def transform_vector(matrix, point):
+    p=np.array(point[:])
+    p=np.array(np.append(p,[0]))
+    matrix=np.array(matrix)
+    return np.dot(p,matrix)[0:3]
+
+def transform_sphere(matrix, sphere):
+    sphere["position"]=transform_point(matrix,sphere["position"])
+
 def add_sphere(position, radius, color):
     return dict(type='sphere', position=np.array(position),
         radius=np.array(radius), color=np.array(color), reflection=.0, refraction=0.9)
+
+def transform_plane(matrix, plane):
+    plane["position"]=transform_point(matrix,plane["position"])
+    plane["normal"]=transform_vector(matrix,plane["normal"])
 
 def add_plane(position, normal):
     return dict(type='plane', position=np.array(position),
         normal=np.array(normal),
         color=np.array([1.,1.,1.]),
         # color=lambda M: (color_plane1 if (int(M[0] * 2) % 2) == (int(M[2] * 2) % 2) else color_plane0),
-        diffuse_c=.75, specular_c=.5, reflection=.0, refraction=0.)
+        diffuse_c=.75, specular_c=.5, reflection=.5, refraction=0.)
+
+def add_light(position,color):
+    return dict(L = np.array(position), color_light = np.array(color))
+
 
 def calculate_ray(rayO,rayD,max):
     col = np.zeros(3)
@@ -209,21 +240,23 @@ def loadOBJ(filename):
     norms = []
     vertsOut = []
     normsOut = []
+
     for line in open(filename, "r"):
         vals = line.split()
-        if vals[0] == "v":
-            v = map(float, vals[1:4])
-            verts.append(v)
-        if vals[0] == "vn":
-            n = map(float, vals[1:4])
-            norms.append(n)
-        if vals[0] == "f":
-            for f in vals[1:]:
-                w = f.split("/")
-                # OBJ Files are 1-indexed so we must subtract 1 below
-                vertsOut.append(list(verts[int(w[0])-1]))
-                normsOut.append(list(norms[int(w[2])-1]))
-                numVerts += 1
+        if len(vals)>0:
+            if vals[0] == "v":
+                v = map(float, vals[1:4])
+                verts.append(v)
+            if vals[0] == "vn":
+                n = map(float, vals[1:4])
+                norms.append(n)
+            if vals[0] == "f":
+                for f in vals[1:]:
+                    w = f.split("/")
+                    # OBJ Files are 1-indexed so we must subtract 1 below
+                    vertsOut.append(list(verts[int(w[0])-1]))
+                    normsOut.append(list(norms[int(w[2])-1]))
+                    numVerts += 1
     return vertsOut, normsOut
 
 n=3
@@ -233,29 +266,37 @@ h = 90*n
 # List of objects.
 color_plane0 = 1. * np.ones(3)
 color_plane1 = 0. * np.ones(3)
+s=add_sphere([.75, .1, 4.], 1., [0., 0., 1.])
+p=add_plane([0., 0, 10], [0., 0., -0.5])
+t=add_triangle([2., 2., 6.], [2., -2., 6.], [-2., -2., 6.], [1., 0., 1.])
+
+T=np.array([[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,2,0,1]])
+
+transform_triangle(T,t)
+
 scene = [
-        #add_sphere([.75, .1, 4.], 1., [0., 0., 1.]),
-        # add_sphere([-.75, .1, 2.25], .6, [.5, .223, .5]),
-         #add_sphere([-2.75, .1, 3.5], .6, [1., .572, .184]),
-        #add_plane([0., -1., 0.], [0., 1., 0.]),
-        #add_triangle([2., 2., 6.], [2., -2., 6.], [-2., -2., 6.], [1., 0., 1.]),
-        #add_plane([0., 0, 10], [0., 0., -0.5]),
+        s,
+         add_sphere([-.75, .1, 2.25], .6, [.5, .223, .5]),
+         add_sphere([-2.75, .1, 3.5], .6, [1., .572, .184]),
+        add_plane([0., -1., 0.], [0., 1., 0.]),
+        t,
+        add_plane([0., 0, 10], [0., 0., -0.5]),
     ]
 
 #Import .obj
-listaVertices,listaNormales = loadOBJ("test.OBJ")
-
-print listaVertices
-
-it = iter(listaVertices)
-for x, y, z in zip(it, it, it):
-    scene.append(add_triangle(x,y,z,[.5, .223, .5]))
+# listaVertices,listaNormales = loadOBJ("Rock1.obj")
+#
+#
+# it = iter(listaVertices)
+# for x, y, z in zip(it, it, it):
+#     scene.append(add_triangle(x,y,z,[.5, .223, .5]))
+# print len(scene)
 
 # Light position and color.
 Lights=[
-dict(L = np.array([-5., 5., 0.]), color_light = np.ones(3)),
-# dict(L = np.array([0., 5., 0.]), color_light = np.array([0.,0.,1.])),
-# dict(L = np.array([5., 5., 0.]), color_light = np.array([1.,0.,1.]))
+add_light([-5., 5., 0.],np.ones(3))
+# add_light([0., 5., 0.],[0.,0.,1.])
+# add_light([5., 5., 0.],[1.,0.,1.])
 ]
 
 
@@ -267,9 +308,9 @@ specular_k = 50.
 
 depth_max = 5  # Maximum number of light reflections.
 col = np.zeros(3)  # Current color.
-O = np.array([0., 0, -1.])  # Camera.
+O = np.array([0., -0., -1.])  # Camera.
 Q = np.array([0., 0., 0.])  # Camera pointing to.
-it=5
+it=1
 
 
 
@@ -328,7 +369,6 @@ for i, x in enumerate(np.linspace(S[0], S[2], w)):
         # print "!!!!!!"
         # print img[h - j - 1, i, :]
 
-print white
 for i, x in enumerate(np.linspace(S[0], S[2], w)):
     for j, y in enumerate(np.linspace(S[1], S[3], h)):
         # print "----"
