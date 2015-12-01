@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import random as random
+import time
 
 def normalize(x):
     x /= np.linalg.norm(x)
@@ -13,6 +14,11 @@ def intersect_plane(O, D, P, N):
     denom = np.dot(D, N)
     if np.abs(denom) == 0:
         return np.inf
+
+    if denom<0:
+        N=-N
+        denom = np.dot(D, N)
+
     d = np.dot(P - O, N) / denom
     if d <= 0:
         return np.inf
@@ -30,14 +36,13 @@ def intersect_triangle(O, D, a, b, c, N):
     S2 = np.dot(np.cross((c-b),(p-b)),N)
     S3 = np.dot(np.cross((a-c),(p-c)),N)
 
-
-    if S3>0:
-        if S2>0:
-            if S1>0:
-                return d
     if S3<0:
         if S2<0:
             if S1<0:
+                return d
+    if S3>0:
+        if S2>0:
+            if S1>0:
                 return d
     return np.inf
 
@@ -47,8 +52,6 @@ def intersect_sphere(O, D, S, R):
     # O and S are 3D points, D (direction) is a normalized vector, R is a scalar.
     a = np.dot(D, D)
     OS = O - S
-
-
 
     b = 2 * np.dot(D, OS)
     c = np.dot(OS, OS) - R * R
@@ -108,15 +111,17 @@ def trace_ray(rayO, rayD):
     color = get_color(obj, M)
     toO = normalize(O - M)
     col_ray=0
+
     for i, l in enumerate(Lights):
         L=l["L"]
         color_light=l["color_light"]
 
         toL = normalize(L - M)
+        dis=intersect(L, -toL, obj)
         # Shadow: find if the point is shadowed or not.
-        lo = [intersect(M + toL * .0001, toL, obj_sh)
+        lo = [intersect(M, toL, obj_sh)
                 for k, obj_sh in enumerate(scene) if k != obj_idx]
-        if not lo or min(lo) > t:
+        if not lo or min(lo) > dis:
             # Start computing the color.
             # Lambert shading (diffuse).
             col_ray += obj.get('diffuse_c', diffuse_c) * max(np.dot(N, toL), 0) * color
@@ -125,6 +130,14 @@ def trace_ray(rayO, rayD):
     col_ray += color*ambient
 
     return obj, M, N, col_ray
+
+def transform(matrix, obj):
+    if obj['type'] == 'plane':
+        transform_plane(matrix, obj)
+    elif obj['type'] == 'sphere':
+        transform_sphere(matrix, obj)
+    elif obj['type'] == 'triangle':
+        transform_triangle(matrix, obj)
 
 def transform_triangle(matrix, triangle):
     triangle["a"]=transform_point(matrix,triangle["a"])
@@ -138,9 +151,7 @@ def add_triangle(a, b, c, color):
         b=np.array(b), c=np.array(c),
         # ( (V2 - V1) x (V3 - V1) ) / | (V2 - V1) x (V3 - V1) |
         normal=normalize(np.cross((np.array(b)-np.array(a)),(np.array(c)-np.array(a))))
-
-        #normal=normalize(np.multiply(np.subtract(b,a),np.subtract(c,a))/np.dot(np.subtract(b,a),np.subtract(c,a)))
-        , color=np.array(color),  reflection=.0, refraction=.7)
+        , color=np.array(color),  reflection=.0, refraction=.0)
 
 def transform_point(matrix, point):
     p=np.array(point[:])
@@ -171,7 +182,7 @@ def add_plane(position, normal):
         normal=np.array(normal),
         color=np.array([1.,1.,1.]),
         # color=lambda M: (color_plane1 if (int(M[0] * 2) % 2) == (int(M[2] * 2) % 2) else color_plane0),
-        diffuse_c=.75, specular_c=.5, reflection=.5, refraction=0.)
+        diffuse_c=.75, specular_c=.5, reflection=.0, refraction=0.)
 
 def add_light(position,color):
     return dict(L = np.array(position), color_light = np.array(color))
@@ -185,30 +196,23 @@ def calculate_ray(rayO,rayD,max):
     colRefl = np.zeros(3)
     colRefl[:] = 0.
     if max==0:
-        return col
+        return []
     traced = trace_ray(rayO, rayD)
     if not traced:
-        return col
+        return []
 
     obj, M, N, col_ray = traced
 
-    refraction = obj.get('refraction', 1.)
-    reflection = obj.get('reflection', 1.)
+    refraction = obj.get('refraction', 0.)
+    reflection = obj.get('reflection', 0.)
 
     if reflection>1e-6:
         rayOref, rayDref = M + N * .0001, normalize(rayD - 2 * (np.dot(rayD, N)) * N)
         colRefl=calculate_ray(rayOref,rayDref,max-1)
+        if colRefl==[]:
+            reflection=0.
+            colRefl=[0.,0.,0.]
 
-    # Refractation
-
-    # sc=np.dot(N,rayD)
-    # A=sc-np.sqrt(1-refractionN*refractionN*(1-sc*sc))
-    # B=np.array(refractionN*rayD)
-    # rayDrefr = normalize(-B + (refractionN*sc-A)*N)
-    # rayOrefr = M + rayDrefr * .0001
-    # print rayDrefr
-
-    # refraction = rayV * obj.get('refraction', 1.)
 
     if np.abs(refraction)>1e-6:
         refractionN=refraction
@@ -226,6 +230,9 @@ def calculate_ray(rayO,rayD,max):
         rayOrefr = M + rayDrefr * .001
 
         colRfr=calculate_ray(rayOrefr,rayDrefr,max-1)
+        if colRfr==[]:
+            refraction=0.
+            colRfr=[0.,0.,0.]
 
     col = col_ray*(1-refraction-reflection)+colRfr*refraction+colRefl*reflection
 
@@ -255,11 +262,12 @@ def loadOBJ(filename):
                     w = f.split("/")
                     # OBJ Files are 1-indexed so we must subtract 1 below
                     vertsOut.append(list(verts[int(w[0])-1]))
-                    normsOut.append(list(norms[int(w[2])-1]))
+                    # normsOut.append(list(norms[int(w[2])-1]))
                     numVerts += 1
     return vertsOut, normsOut
 
 n=3
+antialiasing=3
 w = 160*n
 h = 90*n
 
@@ -268,37 +276,70 @@ color_plane0 = 1. * np.ones(3)
 color_plane1 = 0. * np.ones(3)
 s=add_sphere([.75, .1, 4.], 1., [0., 0., 1.])
 p=add_plane([0., 0, 10], [0., 0., -0.5])
-t=add_triangle([2., 2., 6.], [2., -2., 6.], [-2., -2., 6.], [1., 0., 1.])
+t=add_triangle([2., 1., 2.], [2., 2., 3.], [-2., 3., 3.], [0., 0., 1.])
 
-T=np.array([[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,2,0,1]])
+# T=np.array([[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,2,0,1]])
 
-transform_triangle(T,t)
+# transform_triangle(T,t)
+t1=add_triangle([0., 3., 2.5], [-0.5, 2., 3.], [0.5, 2., 3.], [0., 2., 1.])
+t2=add_triangle([0., 3., 2.5], [-0.5, 2., 3.], [0., 2., 2.], [0., 2., 1.])
+t3=add_triangle([0., 3., 2.5], [0.5, 2., 3.], [0., 2., 2.], [0., 2., 1.])
+t4=add_triangle([-0.5, 2., 3.], [0.5, 2., 3.], [0., 2., 2.], [0., 2., 1.])
 
+T=np.array([[2,0,0,0],[0,2,0,0],[0,0,2,0],[-1,0,0,1]])
+alf=0.3
+R=np.array([[np.cos(alf),0,-np.sin(alf),0],[0,1,0,0],[np.sin(alf),0,np.cos(alf),0],[0,0,0,1]])
+# transform_triangle(T,t1)
+# transform_triangle(T,t2)
+# transform_triangle(T,t3)
+# transform_triangle(T,t4)
+
+# transform_triangle(R,t1)
+# transform_triangle(R,t2)
+# transform_triangle(R,t3)
+# transform_triangle(R,t4)
+# s=add_sphere([2.75, .1, 2.25], .6, [.5, .223, .5])
+s=add_sphere([0.75, .4, 2.5], .6, [.5, .223, .5])
+s['reflection']=1.
+s['refraction']=0.
+s2=add_sphere([-0.75, .1, 2.5], .6, [1., .572, .184])
+s2['reflection']=0.
+s2['refraction']=0.95
 scene = [
+        # s,
         s,
-         add_sphere([-.75, .1, 2.25], .6, [.5, .223, .5]),
-         add_sphere([-2.75, .1, 3.5], .6, [1., .572, .184]),
+        s2,
+        add_plane([-5., 0., 0.], [1., 0., 0.]),
+        add_plane([5., 0., 0.], [-1., 0., 0.]),
         add_plane([0., -1., 0.], [0., 1., 0.]),
-        t,
+
+        t1,
+        t2,
+        t3,
+        t4,
+        add_plane([0., 0, 10], [0., 0., -0.5]),
+        add_sphere([2.75, .1, 4.], 1., [0., 0., 1.]),
         add_plane([0., 0, 10], [0., 0., -0.5]),
     ]
 
 #Import .obj
-# listaVertices,listaNormales = loadOBJ("Rock1.obj")
-#
-#
-# it = iter(listaVertices)
+listaVertices,listaNormales = loadOBJ("dodecaedro.obj")
+
+
+it = iter(listaVertices)
 # for x, y, z in zip(it, it, it):
 #     scene.append(add_triangle(x,y,z,[.5, .223, .5]))
 # print len(scene)
 
 # Light position and color.
 Lights=[
-add_light([-5., 5., 0.],np.ones(3))
+add_light([-0., 2., -0.],np.ones(3))
 # add_light([0., 5., 0.],[0.,0.,1.])
 # add_light([5., 5., 0.],[1.,0.,1.])
 ]
-
+# T=np.array([[1.,0.,0.,0.],[0.,1.,0.,0.],[0.,0.,1.,0.],[10.,0.,0.,1.]])
+# for i, obj in enumerate(scene):
+#     transform(T,obj)
 
 # Default light and material parameters.
 ambient = .05
@@ -308,9 +349,8 @@ specular_k = 50.
 
 depth_max = 5  # Maximum number of light reflections.
 col = np.zeros(3)  # Current color.
-O = np.array([0., -0., -1.])  # Camera.
+O = np.array([0., 0, -1.])  # Camera.
 Q = np.array([0., 0., 0.])  # Camera pointing to.
-it=1
 
 
 
@@ -318,22 +358,27 @@ img = np.zeros((h, w, 3))
 
 rh = float(w) / h
 rw = float(h) / w
-pixh = 2. / h
-pixw = 2. / w
+
 # Screen coordinates: x0, y0, x1, y1.
-S = (-1., -1. / rh + .25, 1., 1. / rw + .25)
+r = float(w) / h
+# Screen coordinates: x0, y0, x1, y1.
+S = (-1., -1. / r + .25, 1., 1. / r + .25)
+pixh = (S[1]-S[3]) / h
+pixw = (S[0]-S[2]) / w
 
 # Loop through all pixels.
 arr=[[w] * h for i in range (w)]
 
 white=np.ones(3)
+start = time.time()
+
 for i, x in enumerate(np.linspace(S[0], S[2], w)):
     if i % 10 == 0:
         print i / float(w) * 100, "%"
     for j, y in enumerate(np.linspace(S[1], S[3], h)):
         col[:] = 0.
         n=0
-        while n<it:
+        while n<antialiasing:
             xx=-pixh/2+random.random()*pixh
             yy=-pixw/2+random.random()*pixw
             # print "--"
@@ -341,7 +386,7 @@ for i, x in enumerate(np.linspace(S[0], S[2], w)):
             # print xx
             # print y
             # print yy
-            Q[:2] = (x+xx, y+yy)
+            Q[:2] = (x, y)
             D = normalize(Q - O)
             depth = 0
             rayO, rayD = O, D
@@ -377,3 +422,6 @@ for i, x in enumerate(np.linspace(S[0], S[2], w)):
         img[h - j - 1, i, :] = np.clip(img[h - j - 1, i]/white, 0, 1)
 
 plt.imsave('fig.png', img)
+
+end = time.time()
+print end - start
