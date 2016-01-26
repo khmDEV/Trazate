@@ -441,22 +441,22 @@ start = time.time()
 for i, x in enumerate(np.linspace(S[0], S[2], w)):
 
     for j, y in enumerate(np.linspace(S[1], S[3], h)):
-        # end = time.time()
-        # stimate="~"
-        # perc=float(i*h+j) / float(w*h)
-        # if perc>0:
-        #     stimate=int(((end - start)*(1-perc))/perc)
-        #     if stimate>3600:
-        #         stimate=str(stimate/3600)+"h"+str((stimate%3600)/60)+"m"+str(stimate%60)+"s"
-        #     elif stimate>60:
-        #         stimate=str(stimate/60)+"m"+str(stimate%60)+"s"
-        #     else:
-        #         stimate=str(stimate)+"s"
-        # text=str(perc * 100)+"% estimado: "+stimate+"              \r"
-        # stdout.write(text)
-        # stdout.flush()
-        # col[:] = 0.
-        # n=0
+        end = time.time()
+        stimate="~"
+        perc=float(i*h+j) / float(w*h)
+        if perc>0:
+            stimate=int(((end - start)*(1-perc))/perc)
+            if stimate>3600:
+                stimate=str(stimate/3600)+"h"+str((stimate%3600)/60)+"m"+str(stimate%60)+"s"
+            elif stimate>60:
+                stimate=str(stimate/60)+"m"+str(stimate%60)+"s"
+            else:
+                stimate=str(stimate)+"s"
+        text=str(perc * 100)+"% estimado: "+stimate+"              \r"
+        stdout.write(text)
+        stdout.flush()
+        col[:] = 0.
+        n=0
         while n<antialiasing:
 
             xx=-pixh/2+random.random()*pixh
