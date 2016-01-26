@@ -114,7 +114,7 @@ def trace_ray(rayO, rayD):
     # Find properties of the object.
     N = get_normal(obj, M)
     color = get_color(obj, M)
-    toO = normalize(O - M)
+    toO = normalize(camara - M)
     col_ray=0
 
     for i, l in enumerate(Lights):
@@ -124,6 +124,7 @@ def trace_ray(rayO, rayD):
         toL = normalize(L - M)
         if np.dot(N, toL)<0:
             N=-N
+
         dis=intersect(L, -toL, obj)
         # Shadow: find if the point is shadowed or not.
         inters=1
@@ -189,10 +190,10 @@ def transform_plane(matrix, plane):
 
 def add_plane(position, normal):
     return dict(type='plane', position=np.array(position),
-        normal=np.array(normal),
+        normal=normalize(np.array(normal)),
         color=np.array([1.,1.,1.]),
         # color=lambda M: (color_plane1 if (int(M[0] * 2) % 2) == (int(M[2] * 2) % 2) else color_plane0),
-        diffuse_c=.75, specular_c=.5, reflection=.0, refraction=0.)
+        diffuse_c=1., specular_c=.0, reflection=.0, refraction=0.)
 
 def add_light(position,color):
     return dict(L = np.array(position), color_light = np.array(color))
@@ -213,16 +214,17 @@ def calculate_ray(rayO,rayD,max):
         return col
 
     obj, M, N, col_ray = traced
-
+    col=col_ray
     refraction = obj.get('refraction', 0.)
     reflection = obj.get('reflection', 0.)
 
     if reflection>1e-6:
         rayOref, rayDref = M + N * .0001, normalize(rayD - 2 * (np.dot(rayD, N)) * N)
-        colRefl=calculate_ray(rayOref,rayDref,max-1)
+        col=calculate_ray(rayOref,rayDref,max-1)
 
     if np.abs(refraction)>1e-6:
         refractionN=refraction
+
         I=-rayD
         sc=np.dot(N,(I))
         if sc<0:
@@ -235,9 +237,8 @@ def calculate_ray(rayO,rayD,max):
         rayDrefr = normalize(A - B) #np.array([0.,0.,1.])#
         rayOrefr = M + rayDrefr * .001
 
-        colRfr=calculate_ray(rayOrefr,rayDrefr,max-1)
+        col=calculate_ray(rayOrefr,rayDrefr,max-1)
 
-    col = col_ray*(1-refraction-reflection)+colRfr*refraction+colRefl*reflection
 
     return col
 
@@ -268,7 +269,7 @@ def loadOBJ(filename):
                     numVerts += 1
     return vertsOut, normsOut
 
-n=10
+n=20
 antialiasing=1
 w = 16*n
 h = 9*n
@@ -301,26 +302,54 @@ R=np.array([[np.cos(alf),0,-np.sin(alf),0],[0,1,0,0],[np.sin(alf),0,np.cos(alf),
 # transform_triangle(R,t3)
 # transform_triangle(R,t4)
 # s=add_sphere([2.75, .1, 2.25], .6, [.5, .223, .5])
-s=add_sphere([0.75, .4, 2.5], .6, [.5, .223, .5])
+s=add_sphere([2., .0, 2.5], .5, [.5, .223, .5])
+s['diffuse_c']=0.
+s['specular_c']=0.
 s['reflection']=1.
 s['refraction']=0.
-s2=add_sphere([-0.75, .1, 2.5], .6, [1., .572, .184])
+s2=add_sphere([-2., .0, 2.5], .5, [1., .572, .184])
+s2['diffuse_c']=0.
+s2['specular_c']=0.
 s2['reflection']=0.
-s2['refraction']=0.95
+s2['refraction']=.3
+
+s3=add_sphere([2., 1.2 , 2.5], .5, [.5, .223, .5])
+s3['diffuse_c']=1.
+s3['specular_c']=0.
+s3['reflection']=0.
+s3['refraction']=0.
+
+s4=add_sphere([-2., 1.2, 2.5], .5, [1., .572, .184])
+s4['diffuse_c']=0.
+s4['specular_c']=1.
+s4['reflection']=0.
+s4['refraction']=0.
+
+s5=add_sphere([0., 1.2, 2.5], .5, [1., .572, .184])
+s5['diffuse_c']=1.
+s5['specular_c']=1.
+s5['reflection']=0.
+s5['refraction']=0.
 
 scene = [
         # s,
-        # s,
-        # s2,
-        add_plane([-5., 0., 0.], [1., 0., 0.]),
+        s,
+        s2,
+        s3,
+        s4,
+        s5,
         # add_plane([5., 0., 0.], [-1., 0., 0.]),
+        # add_plane([-5., 0., 0.], [1., 0., 0.]),
+        # add_plane([0., -1., 0.], [0., 1., 0.]),
+        # add_plane([0., 0, 10], [0., 0., -0.5]),
+        add_plane([-5., 0., 0.], [1., 0., 0.]),
         add_plane([0., -1., 0.], [0., 1., 0.]),
+        add_plane([0., 0, 10], [0., 0., -1.]),
         #
         # t1,
         # t2,
         # t3,
         # t4,
-        add_plane([0., 0, 10], [0., 0., -0.5]),
         # add_sphere([2.75, .1, 4.], 1., [0., 0., 1.]),
         # add_plane([0., 0, 10], [0., 0., -0.5]),
     ]
@@ -329,11 +358,25 @@ scene = [
 listaVertices,listaNormales = loadOBJ("bunny.obj")
 
 M=[[2.,0.,0.,0.],[0.,2.,0.,0.],[0.,0.,2.,0.],[0.,0.,0.,1.]]
-M2=[[1.,0.,0.,0.],[1.,0.,0.,0.],[0.,0.,1.,0.],[0.,-1.,0.,1.]]
+M2=[[1.,0.,0.,0.],[1.,0.,0.,0.],[0.,0.,1.,0.],[-.2,-0.2,.0,1.]]
 color=[0.5,1.,0.5]
 it = iter(listaVertices)
 i=0
+minX=np.inf
+maxX=-np.inf
+minY=np.inf
+maxY=-np.inf
+minZ=np.inf
+maxZ=-np.inf
 for x, y, z in zip(it, it, it):
+    minX=min(minX,min(min(x[0],y[0]),z[0]))
+    maxX=max(maxX,max(max(x[0],y[0]),z[0]))
+
+    minY=min(minY,min(min(x[1],y[1]),z[1]))
+    maxY=max(maxY,max(max(x[1],y[1]),z[1]))
+
+    minZ=min(minZ,min(min(x[2],y[2]),z[2]))
+    maxZ=max(maxZ,max(max(x[2],y[2]),z[2]))
     t=add_triangle(x,y,z,color)
     # arr=[np.array(listaNormales[i*3]),np.array(listaNormales[i*3+1]),np.array(listaNormales[i*3+2])]
     # t["normal"]=normalize(np.cross(arr[1]-arr[0],arr[2]-arr[0]))
@@ -342,16 +385,23 @@ for x, y, z in zip(it, it, it):
         sys.exit()
 
     transform(M,t)
-    #transform(M2,t)
+    transform(M2,t)
     scene.append(t)
     i=i+1
-# print len(scene)
 
+
+# t=add_triangle([minX,minY,minZ],[maxX,minY,minZ],[maxX,maxY,maxZ],color)
+
+
+
+transform(M,t)
+transform(M2,t)
+scene.append(t)
 # Light position and color.
 Lights=[
-add_light([-0., 1., -2.],np.ones(3)),
+add_light([4., .5, -2.],np.ones(3)),
 # add_light([0., 2., -2.],np.ones(3)),
-add_light([0., 3., -2.],np.ones(3))
+add_light([-4., .5, -2.],np.ones(3))
 ]
 # T=np.array([[1.,0.,0.,0.],[0.,1.,0.,0.],[0.,0.,1.,0.],[10.,0.,0.,1.]])
 # for i, obj in enumerate(scene):
@@ -365,48 +415,50 @@ specular_k = 50.
 
 depth_max = 5  # Maximum number of light reflections.
 col = np.zeros(3)  # Current color.
-O = np.array([0., 0, -1.])  # Camera.
-Q = np.array([0., 0., 0.])  # Camera pointing to.
+
+camara = np.array([0., 0.35, -1.])  # Camera.
+point = np.array([0., 0., 0.])  # Camera pointing to.
 
 
 
 img = np.zeros((h, w, 3))
 
-rh = float(w) / h
-rw = float(h) / w
+if w>h:
+    r = float(w) / h
+else:
+    r = float(h) / w
 
-# Screen coordinates: x0, y0, x1, y1.
-r = float(w) / h
 # Screen coordinates: x0, y0, x1, y1.
 S = (-1., -1. / r + .25, 1., 1. / r + .25)
-pixh = (S[1]-S[3]) / h
-pixw = (S[0]-S[2]) / w
-
+pixh = 2. / h
+pixw = 2. / w
 # Loop through all pixels.
 arr=[[w] * h for i in range (w)]
 
 white=np.ones(3)
 start = time.time()
-print "Poligonos: ",len(scene)
 
 for i, x in enumerate(np.linspace(S[0], S[2], w)):
-    for j, y in enumerate(np.linspace(S[1], S[3], h)):
-        end = time.time()
-        stimate="~"
-        perc=float(i*h+j) / float(w*h)
-        if perc>0:
-            stimate=int(((end - start)*(1-perc))/perc)
-            if stimate>60:
-                stimate=str(stimate/60)+"m"+str(stimate%60)+"s"
-            else:
-                stimate=str(stimate)+"s"
-        text=str(perc * 100)+"% estimado: "+stimate+"              \r"
-        stdout.write(text)
-        stdout.flush()
 
-        col[:] = 0.
-        n=0
+    for j, y in enumerate(np.linspace(S[1], S[3], h)):
+        # end = time.time()
+        # stimate="~"
+        # perc=float(i*h+j) / float(w*h)
+        # if perc>0:
+        #     stimate=int(((end - start)*(1-perc))/perc)
+        #     if stimate>3600:
+        #         stimate=str(stimate/3600)+"h"+str((stimate%3600)/60)+"m"+str(stimate%60)+"s"
+        #     elif stimate>60:
+        #         stimate=str(stimate/60)+"m"+str(stimate%60)+"s"
+        #     else:
+        #         stimate=str(stimate)+"s"
+        # text=str(perc * 100)+"% estimado: "+stimate+"              \r"
+        # stdout.write(text)
+        # stdout.flush()
+        # col[:] = 0.
+        # n=0
         while n<antialiasing:
+
             xx=-pixh/2+random.random()*pixh
             yy=-pixw/2+random.random()*pixw
             # print "--"
@@ -414,10 +466,14 @@ for i, x in enumerate(np.linspace(S[0], S[2], w)):
             # print xx
             # print y
             # print yy
-            Q[:2] = (x, y)
-            D = normalize(Q - O)
+            Q=point
+            if antialiasing>1:
+                Q[:2] = (x+xx, y+yy)
+            else:
+                Q[:2] = (x, y)
+            D = normalize(point - camara)
             depth = 0
-            rayO, rayD = O, D
+            rayO, rayD = camara, D
             rayV = 1.
             # Loop through initial and secondary rays.
             # while depth < depth_max:
@@ -430,15 +486,18 @@ for i, x in enumerate(np.linspace(S[0], S[2], w)):
             #     depth += 1
             #     col += reflection * col_ray
             #     reflection *= obj.get('reflection', 1.)
-            # print "+++"
-            col+=calculate_ray(rayO,rayD,depth_max)
+            cc=calculate_ray(rayO,rayD,depth_max)
+            if cc!=[]:
+                col+=cc
             # print "+++"
             # print n
             # print col
             n=n+1
         # img[h - j - 1, i, :] = np.clip(col/it, 0, 1)
-
+        col/=n
         # white=np.maximum(np.max(col),np.max(white))*np.ones(3)
+        # white=np.maximum(col,white)
+        # print white
         img[h - j - 1, i, :]=col
         # print "!!!!!!"
         # print img[h - j - 1, i, :]
@@ -448,14 +507,9 @@ for i, x in enumerate(np.linspace(S[0], S[2], w)):
         # print "----"
         # print img[h - j - 1, i, :]
         # print np.clip(img[h - j - 1, i]/white, 0, 1)
-        #img[h - j - 1, i]=normalize(img[h - j - 1, i])
-        print img[h - j - 1, i]
-        print max(img[h - j - 1, i])
-        img[h - j - 1, i]/=white
-        print img[h - j - 1, i]
-        img[h - j - 1, i, :] = np.clip(img[h - j - 1, i], 0, 1)
+        img[h - j - 1, i, :] = np.clip(img[h - j - 1, i]/white, 0, 1)
 
 plt.imsave('fig.png', img)
 
 end = time.time()
-print end - start
+print end - start#"ms"
